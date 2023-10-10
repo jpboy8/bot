@@ -15,6 +15,8 @@ def repeat_if_failed(count: int, timeout: int = 1, handled_exceptions=None):
                 try:
                     data = func(*args, **kwargs)
                 except handled_exceptions:
+                    print(attempt)
+                    print(handled_exceptions)
                     time.sleep(timeout)
                 else:
                     break

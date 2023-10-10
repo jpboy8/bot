@@ -1,7 +1,8 @@
 import mysql.connector
 from mysql.connector import pooling
+from mysql.connector.errors import PoolError
 
-from .utils import repeat_if_failed
+from utils import repeat_if_failed
 
 
 class Database:
@@ -16,17 +17,19 @@ class Database:
             database=database,
         )
 
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
-    def add_user(self, user_id, name, surname, phone_number):
+    # 
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
+    def add_user(self, user_id, name, surname, phone_number, patronymic):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "INSERT INTO users (user_id, name, surname, phone_number) VALUES (%s, %s, %s, %s)",
-                    (user_id, name, surname, phone_number),
+                    "INSERT INTO users (user_id, name, surname, phone_number, patronymic) VALUES (%s, %s, %s, %s, %s)",
+                    (user_id, name, surname, phone_number, patronymic),
                 )
                 conn.commit()
 
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    # 
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def user_exists(self, user_id):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -36,7 +39,8 @@ class Database:
                 else:
                     return False
 
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    # 
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def set_name(self, user_id, name):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -46,7 +50,8 @@ class Database:
                 )
                 conn.commit()
 
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    # 
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def set_surname(self, user_id, surname):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -56,7 +61,8 @@ class Database:
                 )
                 conn.commit()
 
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    # 
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def set_phone_number(self, user_id, phone_number):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -66,24 +72,37 @@ class Database:
                 )
                 conn.commit()
 
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    # 
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))            
+    def set_patronymic(self, user_id, patronymic):
+        with self.connection_pool.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    "UPDATE users SET patronymic = %s WHERE user_id = %s",
+                    (patronymic.capitalize(), user_id),
+                )
+                conn.commit()
+
+    # 
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def show_profile(self, user_id):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT name, surname, phone_number FROM users WHERE user_id = %s",
+                    "SELECT name, surname, phone_number, patronymic FROM users WHERE user_id = %s",
                     (user_id,),
                 )
                 result = cursor.fetchall()
                 name = result[0][0]
                 surname = result[0][1]
                 phone = result[0][2]
+                patronymic = result[0][3]
 
-                return f"Имя: {name}\nФамилия: {surname}\nНомер телефона: {phone}"
+                return f"Имя: {name}\nФамилия: {surname}\nОтчество: {patronymic}\nНомер телефона: {phone}"
 
     # Для Админов
     # Добавление чата в бд
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def add_chat(self, chat_id, title):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -94,6 +113,7 @@ class Database:
                 conn.commit()
 
     # Проверка на существование чата в бд
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def chat_exists(self, chat_id):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -102,9 +122,20 @@ class Database:
                     return True
                 else:
                     return False
+                
+    # Проверка на существования номер телефона в бд
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
+    def phone_exists(self, phone):
+        with self.connection_pool.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT user_id FROM users WHERE phone_number = %s", (phone,))
+                if len(cursor.fetchall()) != 0:
+                    return True
+                else:
+                    return False
 
     # Добавление записей в таблицу chat_members
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def add_chat_member(self, user_id, chat_id):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -125,81 +156,50 @@ class Database:
                             )
                             conn.commit()
 
-    # находит инфу об юзере по имени и фамилии
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
-    def search_info_by_name_and_surname(self, name, surname):
+    # находит инфу об юзере по фио
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
+    def search_info_by_full_name(self, name, surname, patronymic):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT user_id, phone_number from users WHERE name = %s AND surname = %s",
-                    (name, surname),
-                )
-                user_info = cursor.fetchone()
-                user_id = user_info[0]
-                u_phone_number = user_info[1]
-
-                cursor.execute(
                     """
-                    SELECT
-                        chats.name
-                    FROM users
-                    INNER JOIN chat_members ON users.user_id = chat_members.user_id
-                    INNER JOIN chats ON chat_members.chat_id = chats.chat_id
-                    WHERE users.user_id = %s;
-                    """,
-                    (user_id,),
-                )
+                SELECT u.name, u.surname, u.phone_number, u.patronymic, 
+                IFNULL(GROUP_CONCAT(c.name), 'Нет групп') AS group_names
+                FROM users u
+                LEFT JOIN chat_members cm ON u.user_id = cm.user_id
+                LEFT JOIN chats c ON cm.chat_id = c.chat_id
+                WHERE u.name = %s AND u.surname = %s AND u.patronymic = %s
+                GROUP BY u.user_id;
+                """, (name, surname, patronymic))
 
-                groups = cursor.fetchall()
+                for data in cursor.fetchall():
+                    yield data
 
-                dict_info = {
-                    "name": name,
-                    "surname": surname,
-                    "phone": u_phone_number,
-                    "groups": groups,
-                }
-
-                return dict_info
+                
 
     # находит инфу об юзере по номеру телефона
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def search_info_by_phone(self, phone):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
                 cursor.execute(
-                    "SELECT user_id, name, surname from users WHERE phone_number = %s",
-                    (phone,),
-                )
-                user_info = cursor.fetchone()
-                user_id = user_info[0]
-                u_name = user_info[1]
-                u_surname = user_info[2]
-
-                cursor.execute(
                     """
-                    SELECT
-                        chats.name
-                    FROM users
-                    INNER JOIN chat_members ON users.user_id = chat_members.user_id
-                    INNER JOIN chats ON chat_members.chat_id = chats.chat_id
-                    WHERE users.user_id = %s;
-                    """,
-                    (user_id,),
+                    SELECT u.name, u.surname, u.phone_number, u.patronymic, 
+                        IFNULL(GROUP_CONCAT(c.name), 'Нет групп') AS group_names
+                    FROM users u
+                    LEFT JOIN chat_members cm ON u.user_id = cm.user_id
+                    LEFT JOIN chats c ON cm.chat_id = c.chat_id
+                    WHERE u.phone_number = %s
+                    GROUP BY u.user_id;
+                    """, (phone, )
                 )
 
-                groups = cursor.fetchall()
-
-                dict_info = {
-                    "name": u_name,
-                    "surname": u_surname,
-                    "phone": phone,
-                    "groups": groups,
-                }
-
-                return dict_info
+                for data in cursor.fetchall():
+                    yield data
+               
 
     # удаление по юзер айди
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def delete_from_bd(self, user_id):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -207,7 +207,7 @@ class Database:
                 conn.commit()
 
     # находит айди юзера и все группы в которых он состоит
-    @repeat_if_failed(count=2, handled_exceptions=(Exception,))
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
     def get_user_id_and_groups_by_phone(self, phone):
         with self.connection_pool.get_connection() as conn:
             with conn.cursor() as cursor:
@@ -234,13 +234,44 @@ class Database:
                 dict_info = {"user_id": user_id, "phone": phone, "groups": groups}
 
                 return dict_info
+    
+
+    # дает инфу об юзере либо по имени либо по фамилии либо по номеру телефона
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
+    def get_info_by_name_or_surname(self, data):
+        with self.connection_pool.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute("SELECT name, surname, patronymic, phone_number FROM users where name = %s OR surname = %s OR phone_number = %s", (data.capitalize(), data.capitalize(), data.capitalize()))
+                for row in cursor.fetchall():
+                    yield row
 
 
-db = Database(
-    host="localhost",
-    user="root",
-    password="Liverpool189256@",
-    database="test",
-)
+    # возвращает инфу о юзере по имени и фамилии
+    @repeat_if_failed(count=2, handled_exceptions=(PoolError,))
+    def get_info_by_name_and_surname(self, name, surname):
+        with self.connection_pool.get_connection() as conn:
+            with conn.cursor() as cursor:
+                cursor.execute(
+                    """
+                SELECT u.name, u.surname, u.phone_number, u.patronymic, 
+                IFNULL(GROUP_CONCAT(c.name), 'Нет групп') AS group_names
+                FROM users u
+                LEFT JOIN chat_members cm ON u.user_id = cm.user_id
+                LEFT JOIN chats c ON cm.chat_id = c.chat_id
+                WHERE u.name = %s AND u.surname = %s
+                GROUP BY u.user_id;
+                """, (name, surname, ))
 
-db.search_info_by_phone("=235")
+                for row in cursor.fetchall():
+                    yield row
+                    
+
+# db = Database(
+#     host="localhost",
+#     user="root",
+#     password="Liverpool189256@",
+#     database="test",
+#     )
+
+# for i in range(10):
+#     db.add_user(1243465+i, 'Test', 'Testov', 12435+i, 'Testovich')
